@@ -752,5 +752,6 @@ class game(pyge.Game):
                 by += 2
             if self.keys[pyge.constant.K_p]:
                 teams[0].csttarg = {}
+
 gm = game()
 gm.run()
