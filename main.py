@@ -1,31 +1,118 @@
+"""
+v 1.4.1:
+    - Added support for files
+    - Added saves
+        - note: not completely finished, it wont save everything but only save blocks
+    - Added config file
+"""
 import random
 import math
 import time
-
 import pyge
+import os
 
-wsize = 270
+WINSZ = (800, 600)
 
+# Initialize files
+
+if not os.path.exists("saves"):
+    os.mkdir("saves")
+
+all_saves = os.listdir("saves")
+
+# new world
+wsize = 150
 x, y = 0, 0
 blksz = 30
-WINSZ = (800, 600)
 vx = x-WINSZ[0]//blksz//2
 vy = y-WINSZ[1]//blksz//2
 csz = 4
 cn = wsize//csz
 gamemode = 0 # 0: normal 1: spectator
-cty_count = 190
+cty_count = 30
+teamn = 4
+
+# input wname
+
+wname = input("World name: ")
+if wname in all_saves:
+    print("World already exists, loading that world...")
+    wmode = False
+else:
+    print("Creating new world...")
+    wmode = True
 
 # config
-is_spilt_line = 0
-allow_sight_away = False
-teamn = 4
-ai_no_respawn = False
-max_ai_targ_at_one_pt = 3
-cty_as_spawn_point = True
-lost_all_terri_no_respawn = True
-let_ai_defence = False
-wall_hp = 60
+
+def read_config(fname):
+    dct = {}
+    fl = open(fname, 'r')
+    rd = fl.read().split('\n')
+    fl.close()
+    for i in rd:
+        if i != '':
+            dct[i.split(':')[0]] = ":".join(i.split(':')[1:])
+            if dct[i.split(':')[0]][0] == ' ':
+                dct[i.split(':')[0]] = dct[i.split(':')[0]][1:]
+    return dct
+
+def write_config(fname, dct):
+    fl = open(fname, 'w+')
+    for i in dct:
+        if type(dct[i]) == bool:
+            fl.write(i+': '+("true" if dct[i] else "false")+'\n')
+        else:
+            fl.write(i+': '+str(dct[i])+'\n')
+    fl.close()
+
+def is_file(fname):
+    try:
+        fl = open(fname, 'r')
+        fl.close()
+        return True
+    except IOError:
+        return False
+
+def_cfgg = {'is_split_line': False, 'allow_sight_away': False, 'ai_no_respawn': False, 'max_ai_targ_at_one_pt': 3, 'cty_as_spawn_point': False, 'lost_all_terri_no_respawn': False, 'let_ai_defence': False, 'wall_hp': 60}
+
+if not is_file('config.txt'):
+    write_config('config.txt', def_cfgg)
+
+cfgg = read_config("config.txt")
+
+def get_bool_from_cfg(name, default):
+    if name in cfgg:
+        if cfgg[name] == 'true':
+            return True
+        elif cfgg[name] == 'false':
+            return False
+        else:
+            return default
+    else:
+        return default
+
+def get_int_from_cfg(name, default):
+    if name in cfgg:
+        return int(cfgg[name])
+    else:
+        return default
+
+def get_str_from_cfg(name, default):
+    if name in cfgg:
+        return cfgg[name]
+    else:
+        return default
+
+is_spilt_line = get_bool_from_cfg('is_split_line', def_cfgg['is_split_line'])
+allow_sight_away = get_bool_from_cfg('allow_sight_away', def_cfgg['allow_sight_away'])
+ai_no_respawn = get_bool_from_cfg('ai_no_respawn', def_cfgg['ai_no_respawn'])
+max_ai_targ_at_one_pt = get_int_from_cfg('max_ai_targ_at_one_pt', def_cfgg['max_ai_targ_at_one_pt'])
+cty_as_spawn_point = get_bool_from_cfg('cty_as_spawn_point', def_cfgg['cty_as_spawn_point'])
+lost_all_terri_no_respawn = get_bool_from_cfg('lost_all_terri_no_respawn', def_cfgg['lost_all_terri_no_respawn'])
+let_ai_defence = get_bool_from_cfg('let_ai_defence', def_cfgg['let_ai_defence'])
+wall_hp = get_int_from_cfg('wall_hp', def_cfgg['wall_hp'])
+
+def_cfg = {'is_split_line': False, 'allow_sight_away': False, 'ai_no_respawn': False, 'max_ai_targ_at_one_pt': 3, 'cty_as_spawn_point': False, 'lost_all_terri_no_respawn': False, 'let_ai_defence': False, 'wall_hp': 60}
 
 def dis(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
@@ -92,6 +179,72 @@ nearby_terri = [[] for i in range(cty_count)]
 # wattr[i][j]: [owner, hp, type] at (i, j)
 entity = {}
 nwentity = {}
+
+def generate_world():
+    for i in range(20):
+        world[random.randint(0, wsize - 1)][random.randint(0, wsize - 1)] = 3
+
+    for i in range(0, wsize):
+        for j in range(5):
+            world[i][wsize // 2 + j] = 2
+            world[wsize // 2 + j][i] = 2
+
+    for j in range(cty_count):
+        rx, ry = random.randint(0, wsize - 1), random.randint(0, wsize - 1)
+        world[rx][ry] = 4
+        all_ckp.append((rx, ry))
+        winsd[rx][ry] = len(all_ckp) - 1
+        if random.randint(0, 3) == 0:
+            imp_ckp.append((rx, ry))
+    print("loading world")
+    while True:
+        ret = generate_area()
+        print("\rgenerating area    " + str(int(ret[1] / wsize ** 2 * 100)) + "% (" + str(ret[1]) + "/" + str(
+            wsize ** 2 * 100) + " blocks)", end="")
+        if not ret[0]:
+            break
+    print("\nfinished")
+
+def load_world_from_file(fname):
+    global wsize, world, wattr, winsd, nearby_terri, entity, nwentity, cty_count
+    f = open("saves/"+fname, 'r')
+    rd = f.read().split()
+    f.close()
+    ind = 0
+    wsz, cty_count, teamn = rd[ind], int(rd[ind + 1]), int(rd[ind + 2])
+    ind += 3
+    for i in range(int(wsz)):
+        for j in range(int(wsz)):
+            world[i][j] = int(rd[ind])
+            if world[i][j] == 4:
+                all_ckp.append((i, j))
+            ind += 1
+    wsize = int(wsz)
+    for i in range(int(wsz)):
+        for j in range(int(wsz)):
+            wattr[i][j] = [int(k) for k in rd[ind].split(",")]
+            ind += 1
+    for i in range(int(wsz)):
+        for j in range(int(wsz)):
+            winsd[i][j] = int(rd[ind])
+            ind += 1
+
+def save_world(*args):
+    f = open("saves/"+wname, 'w')
+    f.write(str(wsize) + " " + str(cty_count) + " " + str(teamn) + "\n")
+    for i in range(wsize):
+        for j in range(wsize):
+            f.write(str(world[i][j]) + " ")
+        f.write("\n")
+    for i in range(wsize):
+        for j in range(wsize):
+            f.write(str(wattr[i][j][0]) + "," + str(wattr[i][j][1]) + "," + str(wattr[i][j][2]) + " ")
+        f.write("\n")
+    for i in range(wsize):
+        for j in range(wsize):
+            f.write(str(winsd[i][j]) + " ")
+        f.write("\n")
+    f.close()
 
 class ba:
     def __init__(self, clr, spd, amp):
@@ -587,11 +740,18 @@ def rect_alpha(w, h, color=(0, 0, 0, 255)):
 
 #todo: game
 
+if wmode:
+    generate_world()
+else:
+    load_world_from_file(wname)
+
 class game(pyge.Game):
     def add_player(self, pl, nm=None):
         self.add_obj(pl, nm)
         all_plr.append(pl)
     def setup(self):
+        self.set_caption("blockwar - " + wname)
+        self.add_event_listener("QUIT", save_world)
         # setup players
         if gamemode == 0:
             self.add_player(player(0, typ="human"), "hm_player")
@@ -620,29 +780,6 @@ class game(pyge.Game):
         #             continue
         #         if world[i][j] == 0:
         #             world[i][j] = 1
-
-        for i in range(20):
-            world[random.randint(0, wsize-1)][random.randint(0, wsize-1)] = 3
-
-        for i in range(0, wsize):
-            for j in range(5):
-                world[i][wsize//2+j] = 2
-                world[wsize//2+j][i] = 2
-
-        for j in range(cty_count):
-            rx, ry = random.randint(0, wsize-1), random.randint(0, wsize-1)
-            world[rx][ry] = 4
-            all_ckp.append((rx, ry))
-            winsd[rx][ry] = len(all_ckp) - 1
-            if random.randint(0, 3) == 0:
-                imp_ckp.append((rx, ry))
-        print("loading world")
-        while True:
-            ret = generate_area()
-            print("\rgenerating area    "+str(int(ret[1]/wsize**2*100))+"% ("+str(ret[1])+"/"+str(wsize**2*100)+" blocks)", end="")
-            if not ret[0]:
-                break
-        print("\nfinished")
 
         self.tick_rate = 33
 
