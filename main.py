@@ -1,10 +1,10 @@
 """
-v 1.4.1:
-    - Added support for files
-    - Added saves
-        - note: not completely finished, it wont save everything but only save blocks
-    - Added config file
+v 1.4.2:
+    - fixed some bugs of saving world
 """
+version = (1, 4, 2)
+support_save_version = [(1, 4, 2)]
+
 import random
 import math
 import time
@@ -35,7 +35,7 @@ teamn = 4
 # input wname
 
 wname = input("World name: ")
-if wname in all_saves:
+if wname+".sv" in all_saves:
     print("World already exists, loading that world...")
     wmode = False
 else:
@@ -179,6 +179,7 @@ nearby_terri = [[] for i in range(cty_count)]
 # wattr[i][j]: [owner, hp, type] at (i, j)
 entity = {}
 nwentity = {}
+hp_ = 100
 
 def generate_world():
     for i in range(20):
@@ -205,32 +206,60 @@ def generate_world():
             break
     print("\nfinished")
 
+
 def load_world_from_file(fname):
-    global wsize, world, wattr, winsd, nearby_terri, entity, nwentity, cty_count
-    f = open("saves/"+fname, 'r')
-    rd = f.read().split()
+    global wsize, world, wattr, winsd, nearby_terri, entity, nwentity, cty_count, x, y, hp_
+    f = open("saves/"+fname+".sv", 'r')
+    rd = f.read().split("\n")
     f.close()
     ind = 0
-    wsz, cty_count, teamn = rd[ind], int(rd[ind + 1]), int(rd[ind + 2])
-    ind += 3
+    vsn = tuple(int(i) for i in rd[ind].split("."))
+    if vsn == version:
+        print("loading world data...")
+    elif vsn in support_save_version:
+        print("loading world data...")
+        print("warning: this save is not saved with the current version of the game, some data may be lost!")
+    else:
+        print("warning: this save is saved with a not supported version of the game!")
+        exit(0)
+    ind += 1
+    wsz, cty_count, teamn = map(int, rd[ind].split(" "))
+    wsize = wsz
+    ind += 1
     for i in range(int(wsz)):
         for j in range(int(wsz)):
-            world[i][j] = int(rd[ind])
-            if world[i][j] == 4:
-                all_ckp.append((i, j))
-            ind += 1
-    wsize = int(wsz)
+            world[i][j] = int(rd[ind].split(" ")[j])
+        ind += 1
     for i in range(int(wsz)):
         for j in range(int(wsz)):
-            wattr[i][j] = [int(k) for k in rd[ind].split(",")]
-            ind += 1
+            wattr[i][j] = [int(k) for k in rd[ind].split(" ")[j].split(",")]
+        ind += 1
     for i in range(int(wsz)):
         for j in range(int(wsz)):
-            winsd[i][j] = int(rd[ind])
-            ind += 1
+            winsd[i][j] = int(rd[ind].split(" ")[j])
+        ind += 1
+    for i in range(cty_count):
+        all_ckp.append((int(rd[ind].split(" ")[i].split(",")[0]), int(rd[ind].split(" ")[i].split(",")[1])))
+    ind += 1
+    x, y, hp_ = map(float, rd[ind].split(" "))
+    ind += 1
+    get_nearby_terri()
+
+def get_nearby_terri():
+    for i in range(wsize):
+        for j in range(wsize):
+            if i+1<wsize and winsd[i+1][j]!=winsd[i][j]:
+                nearby_terri[winsd[i][j]].append(winsd[i+1][j])
+            if j+1<wsize and winsd[i][j+1]!=winsd[i][j]:
+                nearby_terri[winsd[i][j]].append(winsd[i][j+1])
+            if i-1>=0 and winsd[i-1][j]!=winsd[i][j]:
+                nearby_terri[winsd[i][j]].append(winsd[i-1][j])
+            if j-1>=0 and winsd[i][j-1]!=winsd[i][j]:
+                nearby_terri[winsd[i][j]].append(winsd[i][j-1])
 
 def save_world(*args):
-    f = open("saves/"+wname, 'w')
+    f = open("saves/"+wname+".sv", 'w')
+    f.write(".".join(map(str, version))+"\n")
     f.write(str(wsize) + " " + str(cty_count) + " " + str(teamn) + "\n")
     for i in range(wsize):
         for j in range(wsize):
@@ -244,6 +273,9 @@ def save_world(*args):
         for j in range(wsize):
             f.write(str(winsd[i][j]) + " ")
         f.write("\n")
+    for i in range(cty_count):
+        f.write(str(all_ckp[i][0]) + "," + str(all_ckp[i][1]) + " ")
+    f.write("\n" + str(x) + " " + str(y) + " " + str(hp_) + "\n")
     f.close()
 
 class ba:
@@ -743,7 +775,11 @@ def rect_alpha(w, h, color=(0, 0, 0, 255)):
 if wmode:
     generate_world()
 else:
-    load_world_from_file(wname)
+    try:
+        load_world_from_file(wname)
+    except Exception as e:
+        print("Error: the world file is corrupted or not exist!")
+        raise e
 
 class game(pyge.Game):
     def add_player(self, pl, nm=None):
@@ -753,14 +789,21 @@ class game(pyge.Game):
         self.set_caption("blockwar - " + wname)
         self.add_event_listener("QUIT", save_world)
         # setup players
+        print("initializing entities...")
         if gamemode == 0:
-            self.add_player(player(0, typ="human"), "hm_player")
+            self.add_player(player(0, typ="human", hp=hp_), "hm_player")
 
         pit = 24
         pig = 1
 
         for k in range(teamn):
             gx, gy = random.randint(0, wsize-1), random.randint(0, wsize-1)
+            cnt = 0
+            while get_owner(gx, gy) != -1 and get_owner(gx, gy) != k and cnt<1000:
+                gx, gy = random.randint(0, wsize-1), random.randint(0, wsize-1)
+                cnt += 1
+            if cnt == 1000:
+                continue
             if k == 0:
                 gx, gy = 0, 0
             for i in range(pit+(2 if k == 0 else 0)):
@@ -782,6 +825,7 @@ class game(pyge.Game):
         #             world[i][j] = 1
 
         self.tick_rate = 33
+        print("finished!")
 
     def update_back(self):
         global x, y, vx, vy, blksz
