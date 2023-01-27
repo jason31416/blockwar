@@ -34,8 +34,8 @@ cn = wsize//csz
 gamemode = 0 # 0: normal 1: spectator
 cty_count = 70
 teamn = 4
-player_team_boost = 1
-only_log_ipt_cty = True
+player_team_boost = 6
+only_log_ipt_cty = False
 
 # input wname
 
