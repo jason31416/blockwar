@@ -27,7 +27,7 @@ all_saves = os.listdir("saves")
 # new world
 wsize = 300
 x, y = 0, 0
-blksz = 20
+blksz = 40
 vx = x-WINSZ[0]//blksz//2
 vy = y-WINSZ[1]//blksz//2
 csz = 4
@@ -955,10 +955,13 @@ class game(pyge.Game):
     def update_back(self):
         global x, y, vx, vy, blksz
         self.sc.fill((30, 0, 30))
-        blksz = 30
         vx = int(x) - WINSZ[0] // blksz // 2
         vy = int(y) - WINSZ[1] // blksz // 2
         if self.now_page == "main":
+            if self.keys[pyge.constant.K_c]:
+                blksz = 30
+            else:
+                blksz = 40
             will_draw = []
             for i in range(max(vx, 0), min(vx+WINSZ[0]//blksz+2, wsize)):
                 for j in range(max(vy, 0), min(vy+WINSZ[1]//blksz+2, wsize)):
@@ -1010,14 +1013,18 @@ class game(pyge.Game):
                     if not allow_sight_away:
                         rp.x = x
                         rp.y = y
+                    if self.keys[pyge.constant.K_c]:
+                        spd = 0.5
+                    else:
+                        spd = 1
                     if self.keys[pyge.constant.K_w]:
-                        rp.moved(0, -1)
+                        rp.moved(0, -spd)
                     if self.keys[pyge.constant.K_s]:
-                        rp.moved(0, 1)
+                        rp.moved(0, spd)
                     if self.keys[pyge.constant.K_a]:
-                        rp.moved(-1, 0)
+                        rp.moved(-spd, 0)
                     if self.keys[pyge.constant.K_d]:
-                        rp.moved(1, 0)
+                        rp.moved(spd, 0)
                     if self.mouse_click[0] or self.keys[pyge.constant.K_SPACE]:
                         rp.shot(self, self.mouse_pos[0]//blksz+vx, self.mouse_pos[1]//blksz+vy)
                     if rp.x < 0:
@@ -1030,8 +1037,8 @@ class game(pyge.Game):
                         rp.y = wsize - 1
                 else:
                     self.sc.fill((0, 0, 0))
-                    self.draw_text("You died!", 300, 300, 48, color=(255, 0, 0))
-                    self.draw_text(f"You will respawn in {int(rp.respctd//self.tick_rate)} seconds...", 300, 350, 24, color=(255, 255, 255))
+                    self.draw_text("You died!", WINSZ[0]//2-100, WINSZ[1]//2, 48, color=(255, 0, 0))
+                    self.draw_text(f"You will respawn in {int(rp.respctd//self.tick_rate)} seconds...", WINSZ[0]//2-100, WINSZ[1]//2+50, 24, color=(255, 255, 255))
                 rp.check(self)
                 if rp.hurt:
                     rp.hurt = False
