@@ -1,12 +1,12 @@
 """
-v 1.4.3:
-    - fixed some bugs of saving world
-    - added message
-    - added city name
-    - added border of city
+v 1.5.2:
+    - Fixed city name display
+    - Added guns
+
+    - Todo: gun shop!
 """
-version = (1, 4, 3)
-support_save_version = [(1, 4, 3)]
+version = (1, 5, 2)
+support_save_version = [(1, 5, 2)]
 
 import math
 import time
@@ -24,7 +24,7 @@ if not os.path.exists("saves"):
 all_saves = os.listdir("saves")
 
 # new world
-wsize = 150
+wsize = 300
 x, y = 0, 0
 blksz = 20
 vx = x-WINSZ[0]//blksz//2
@@ -32,10 +32,16 @@ vy = y-WINSZ[1]//blksz//2
 csz = 4
 cn = wsize//csz
 gamemode = 0 # 0: normal 1: spectator
-cty_count = 70
-teamn = 4
-player_team_boost = 6
+cty_count = 180
+teamn = 12
+player_team_boost = 0
 only_log_ipt_cty = False
+
+defrespctd = 200
+
+clrs = [(0, 0, 255), (255, 50, 50), (0, 255, 0), (255, 0, 255), (255, 255, 0), (0, 255, 255), (255, 125, 0), (0, 150, 0), (50, 50, 50), (255, 170, 170), (128, 64, 0), (135, 206, 235)]
+
+random.shuffle(clrs)
 
 # input wname
 
@@ -50,15 +56,11 @@ else:
 # functions
 
 def generate_world():
+    global cty_count
     for i in range(20):
         world[random.randint(0, wsize - 1)][random.randint(0, wsize - 1)] = 3
 
-    for i in range(0, wsize):
-        for j in range(5):
-            world[i][wsize // 2 + j] = 2
-            world[wsize // 2 + j][i] = 2
-
-    for j in range(cty_count):
+    for j in range(cty_count//2):
         rx, ry = random.randint(0, wsize - 1), random.randint(0, wsize - 1)
         world[rx][ry] = 4
         all_ckp.append((rx, ry))
@@ -66,6 +68,14 @@ def generate_world():
         ckp_nm.append(getaname())
         if random.randint(0, 3) == 0:
             imp_ckp.append((rx, ry))
+
+    for j in range(cty_count//2):
+        rx, ry = random.randint(0, wsize - 1), random.randint(0, wsize - 1)
+        world[rx][ry] = 6
+        winsd[rx][ry] = 0
+
+    cty_count = cty_count//2
+
     print("loading world")
     while True:
         ret = generate_area()
@@ -115,7 +125,7 @@ def load_world_from_file(fname):
         teamcnt[i] = int(rd[ind].split(" ")[i])
     ind += 1
     for i in range(cty_count):
-        ckp_nm.append(rd[ind].split(" ")[i])
+        ckp_nm.append(rd[ind].split("::")[i])
     ind += 1
     x, y, hp_ = map(float, rd[ind].split(" "))
     ind += 1
@@ -156,7 +166,7 @@ def save_world(*args):
         f.write(str(teams[i].alive_player_count) + " ")
     f.write("\n")
     for i in range(cty_count):
-        f.write(ckp_nm[i] + " ")
+        f.write(ckp_nm[i] + "::")
     f.write("\n" + str(x) + " " + str(y) + " " + str(hp_) + "\n")
     f.close()
 
@@ -170,18 +180,37 @@ def log(gmtk, msg_, clr=(0, 0, 0)):
 
 def somewhere_nearby(p1, p2, r):
     rx, ry = p1+random.randint(-r, r), p2+random.randint(-r, r)
-    while rx < 0 or rx >= wsize or ry < 0 or ry >= wsize or world[rx][ry] != 0:
+    while rx < 0 or rx >= wsize or ry < 0 or ry >= wsize or world[rx][ry] not in (0, 6):
         rx, ry = p1+random.randint(-r, r), p2+random.randint(-r, r)
     return rx, ry
 
 def generate_area():
     global winsd
     bkup = [[winsd[j][i] for i in range(wsize)] for j in range(wsize)]
+    bkup2 = [[world[j][i] for i in range(wsize)] for j in range(wsize)]
     bb = False
     cnt = 0
     for i in range(wsize):
         for j in range(wsize):
-            if bkup[i][j] != -1:
+            if bkup2[i][j]==6:
+                cnt += 1
+                if i + 1 < wsize:
+                    if winsd[i + 1][j] == -1 and random.randint(0, 100) < 60:
+                        world[i + 1][j] = 6
+                        winsd[i+1][j] = 0
+                if i - 1 >= 0:
+                    if winsd[i - 1][j] == -1 and random.randint(0, 100) < 60:
+                        world[i - 1][j] = 6
+                        winsd[i - 1][j] = 0
+                if j + 1 < wsize:
+                    if winsd[i][j + 1] == -1 and random.randint(0, 100) < 60:
+                        world[i][j + 1] = 6
+                        winsd[i][j + 1] = 0
+                if j - 1 >= 0:
+                    if winsd[i][j - 1] == -1 and random.randint(0, 100) < 60:
+                        world[i][j - 1] = 6
+                        winsd[i][j - 1] = 0
+            elif bkup[i][j] != -1:
                 cnt += 1
                 if i+1 < wsize:
                     if winsd[i+1][j] == -1 and random.randint(0, 100) < 60:
@@ -409,13 +438,16 @@ class group:
                 teams[self.team].csttarg[ntarg] += 1
             self.targ = ntarg
 
-blkattrs = {0: ba((200, 200, 200), 1.5, 0), 1: ba((100, 100, 100), 1.5, 100000), 2: ba((0, 0, 50), 2.5, 0), 3: ba((255, 0, 0), 0.2, -1), 4: ba((255, 255, 0), 1.5, 0), 5: ba((100, 100, 100), 1.5, 10)}
+blkattrs = {0: ba((200, 200, 200), 1.5, 0), 1: ba((100, 100, 100), 1.5, 100000), 2: ba((0, 0, 50), 2.5, 0), 3: ba((255, 0, 0), 0.2, -1), 4: ba((255, 255, 0), 1.5, 0), 5: ba((100, 100, 100), 1.5, 10), 6: ba((0, 100, 255), 0.5, -1)}
 # 0: empty, 1: obstacle, 2: road 3: lava 4: city
 
 teams = []
 groups = {"-1": group(0, "-1", [])}
 
-default_gun = [4, 3, 20, 60]
+default_gun = [3, 6, 25, 60]
+
+all_guns = [[3, 6, 30, 60], [6, 11, 22, 60], [20, 45, 5, 100]]
+# gun: (cooldown, power, ammo, reload)
 
 all_plr = []
 
@@ -423,6 +455,7 @@ all_ckp = []
 ckp_nm = []
 imp_ckp = []
 msg = []
+
 
 def build_wall(x, y):
     if world[x][y] == 0:
@@ -435,10 +468,9 @@ def get_et(x, y):
     else:
         return []
 
-# gun: (cooldown, power, range, damage)
 
 for i in range(teamn):
-    teams.append(ta((random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)), i))
+    teams.append(ta(clrs[i], i))
 
 def text(cont, clr=(0, 0, 0)):
     return pyge.pygame.font.Font(None, 20).render(cont, True, clr)
@@ -457,8 +489,19 @@ def get_hp_clr(hp, fhp):
     else:
         return 255, 0, 0
 
+def get_ammo_clr(hp, fhp):
+    rt = hp/fhp
+    if rt == 1:
+        return 50, 150, 255
+    elif rt > 0.5:
+        return 0, 255, 0
+    elif rt > 0.25:
+        return 255, 100, 0
+    else:
+        return 0, 0, 0
+
 class bullet(obj):
-    def __init__(self, x, y, vx, vy, amp, sender, sdt = -1, rg=30, dmg=3, sf=None):
+    def __init__(self, x, y, vx, vy, amp, sender, sdt = -1, rg=20, dmg=3, sf=None):
         if sf is None:
             sf = pyge.rect(4, 4)
         super().__init__(sf, x, y)
@@ -501,29 +544,24 @@ class bullet(obj):
         elif blkattrs[world[int(self.x)][int(self.y)]].amp < self.amp:
             self.amp = blkattrs[world[int(self.x)][int(self.y)]].amp
         for i in all_plr:
-            if 0 <= self.x-i.x <= 1 and 0 <= self.y-i.y <= 1 and self.sender != i.name:
-                if self.dis <= 5:
-                    self.dmg *= 1.5
-                if self.dis <= 1:
-                    self.dmg *= 4
-                i.hp -= int(self.dmg)
-                # i.x += self.vxd
-                # i.y += self.vy
-                i.hurt = True
+            if -0.5 <= self.x-i.x <= 1 and -0.5 <= self.y-i.y <= 1.5 and self.sender != i.name and i.hp > 0:
+                i.hp = int(i.hp-self.dmg)
                 i.lstdamagefrom = self.senderteam
                 gm.rem_obj(self.name)
+                if 0 <= (self.x-vx)*blksz <= 800 and 0 <= (self.y-vy)*blksz <= 600 and (self.sender == "hm_player" or i.name == "hm_player"):
+                    gm.draw_text("-"+str(self.dmg), (self.x-vx)*blksz, (self.y-vy)*blksz, 24, color=(255, 0, 0))
                 break
 
 # todo: player
 
 class player(obj):
-    def __init__(self, team, hp=100, x=0, y=0, typ="ai"):
+    def __init__(self, team, hp=100, x=0, y=0, typ="ai", isloc=False):
         self.team = team
         self.hp = hp
         self.mxhp = hp
         self.typ = typ
         self.hurt = False
-        self.gun = default_gun
+        self.gun = random.choice(all_guns)
         super().__init__(pyge.rect(32, 32, teams[team].clr), x, y)
         self.lstcld = 0
         self.loadam = 0
@@ -533,48 +571,77 @@ class player(obj):
         self.capturing = 0
         self.lstpos = x, y
         self.cpi = 0
+        self.respctd = 0
         self.lstdamagefrom = -1
+        self.lstheal = 0
+        self.islocal = isloc
+
+    def getgrp(self):
+        return None
 
     def respawn(self, gm: pyge.Game):
-        if cty_as_spawn_point and wattr[self.lstcty[0]][self.lstcty[1]][0] == self.team:
+        global gamemode
+        self.lstcty = (int(self.lstcty[0]), int(self.lstcty[1]))
+        if wattr[self.lstcty[0]][self.lstcty[1]][0] == self.team:
             self.x, self.y = somewhere_nearby(self.lstcty[0], self.lstcty[1], 5)
+            self.gun = random.choice(all_guns)
+            self.bllft = self.gun[2]
         else:
-            rn = random.randint(0, len(all_ckp)-1)
-            cnt = 0
-            while wattr[all_ckp[rn][0]][all_ckp[rn][1]][0] != self.team and cnt < 400:
-                rn = random.randint(0, len(all_ckp)-1)
-                cnt += 1
-            if cnt < 400:
-                self.x, self.y = somewhere_nearby(all_ckp[rn][0], all_ckp[rn][1], 5)
-            elif lost_all_terri_no_respawn:
+            if self.islocal:
+                grp: group = groups[self.getgrp()]
+                if grp is not None:
+                    grp.team = wattr[self.lstcty[0]][self.lstcty[1]][0]
+                    if grp in teams[self.team].gps:
+                        teams[self.team].gps.remove(self.getgrp())
+                    teams[wattr[self.lstcty[0]][self.lstcty[1]][0]].gps.append(self.getgrp())
+                teams[wattr[self.lstcty[0]][self.lstcty[1]][0]].alive_player_count += 1
                 teams[self.team].alive_player_count -= 1
-                if teams[self.team].alive_player_count <= 0:
-                    log(gm.tick, "Team " + str(self.team) + " has been eliminated!", (0, 0, 0))
-                if self.typ == "human":
-                    gamemode = 1
-                gm.rem_obj(self.name)
-                if self.lstdamagefrom != -1:
-                    npl = aiplayer(self.lstdamagefrom, x=self.x, y=self.y)
-                    npl.group = str(random.randint(0, 10000000))
-                    gm.add_obj(npl)
-                    all_plr.append(npl)
-                    teams[self.lstdamagefrom].alive_player_count += 1
-                    teams[self.lstdamagefrom].gps.append(npl.group)
-                    groups[npl.group] = group(self.lstdamagefrom, npl.group, [])
-                return
+                self.team = wattr[self.lstcty[0]][self.lstcty[1]][0]
+                self.set_surface(pyge.rect(32, 32, teams[self.team].clr))
+            else:
+                rn = random.randint(0, len(all_ckp)-1)
+                cnt = 0
+                while wattr[all_ckp[rn][0]][all_ckp[rn][1]][0] != self.team and cnt < 800:
+                    rn = random.randint(0, len(all_ckp)-1)
+                    cnt += 1
+                if cnt < 800:
+                    self.x, self.y = somewhere_nearby(all_ckp[rn][0], all_ckp[rn][1], 5)
+                elif lost_all_terri_no_respawn:
+                    teams[self.team].alive_player_count -= 1
+                    if teams[self.team].alive_player_count <= 0:
+                        log(gm.tick, "Team " + str(self.team) + " has been eliminated!", (0, 0, 0))
+                    if self.typ == "human":
+                        gamemode = 1
+                    gm.rem_obj(self.name)
+                    return
         if ai_no_respawn and self.typ == "ai":
             gm.rem_obj(self.name)
             return
 
     def draw(self, gm: pyge.Game):
-        if self.hp <= 0:
+        if self.hp <= 0 or self.respctd > 0:
             return
         if vx <= self.x < vx+WINSZ[0]//blksz and vy <= self.y < vy + WINSZ[1] // blksz:
             gm.sc.blit(to_siz(self.pic, (blksz*(self.pic.get_width()/32), blksz*(self.pic.get_height()/32))), ((self.x-vx-x%1)*blksz, (self.y-vy-y%1)*blksz))
             gm.sc.blit(pyge.rect((self.hp/self.mxhp)*blksz, 5, get_hp_clr(self.hp, self.mxhp)), ((self.x-vx-x%1)*blksz, (self.y-vy-y%1)*blksz-10))
+            gm.sc.blit(pyge.rect((self.bllft/self.gun[2])*blksz, 3, get_ammo_clr(self.bllft, self.gun[2])), ((self.x-vx-x%1)*blksz, (self.y-vy-y%1)*blksz-16))
+            gm.draw_text(f"{self.gun[1]}", (self.x-vx-x%1)*blksz, (self.y-vy-y%1)*blksz-25, 18, color=(0, 0, 0))
+            # print(self.bllft, self.gun)
 
     def check(self, gm: pyge.Game):
+        if self.respctd > 0:
+            self.hp = 0
+            self.respctd -= 1
+            if self.respctd <= 0:
+                self.respawn(gm)
+                self.respctd = 0
+                self.hp = self.mxhp
+            return
         self.hurt = False
+        if self.hp <= 0:
+            # self.x, self.y = -10, -10
+            self.respctd = defrespctd
+            return
         if gm.tick%3 == 0:
             bb = False
             for i in get_et(self.x//csz, self.y//csz):
@@ -589,6 +656,15 @@ class player(obj):
                         self.capturing += 1
                         bb = True
                         if self.capturing > 40:
+                            if wattr[i][j][0] == -1:
+                                gn = f"{random.randint(0, 10000000000)}"
+                                groups[gn] = group(self.team, gn, [])
+                                teams[self.team].gps.append(gn)
+                                gsx, gsy = somewhere_nearby(i, j, wsize // teamn // 4)
+                                for k in range(pig):
+                                    px, py = somewhere_nearby(gsx, gsy, 5)
+                                    gm.add_player(aiplayer(self.team, gn, x=px, y=py, isloc=True, lstcty=(i, j)))
+                                    teams[self.team].alive_player_count += 1
                             if not only_log_ipt_cty or (i, j) in imp_ckp:
                                 if wattr[i][j][0] == 0:
                                     log(gm.tick, "Team " + str(self.team) + f" captured your city '{ckp_nm[all_ckp.index((i, j))]}'!", (155, 155, 0))
@@ -596,7 +672,7 @@ class player(obj):
                                     log(gm.tick, f"your team captured city '{ckp_nm[all_ckp.index((i, j))]}'!", (0, 155, 0))
                             wattr[i][j][0] = self.team
                             self.capturing = 0
-                    if world[i][j] == 4 and wattr[i][j][0] == self.team:
+                    if world[i][j] == 4 and wattr[i][j][0] == self.team and not self.islocal:
                         self.lstcty = i, j
                 if not bb:
                     self.capturing = 0
@@ -604,14 +680,10 @@ class player(obj):
             if i == 3:
                 self.hp -= 0.1
                 self.hurt = True
-        if self.hp <= 0:
-            self.hp = self.mxhp
-            self.x, self.y = somewhere_nearby(self.spawn[0], self.spawn[1], 5)
-            self.respawn(gm)
-            return
-        if gm.tick % 10 == 0:
-            self.hp += 0.1
+        if get_owner(int(self.x), int(self.y)) == self.team and gm.tick!=self.lstheal:
+            self.hp += 0.2
             self.hp = min(self.hp, self.mxhp)
+            self.lstheal = gm.tick
         if self.loadam != 0:
             self.loadam -= 1
             if self.loadam == 0:
@@ -658,7 +730,11 @@ class player(obj):
             amp = min(amp, blkattrs[i].amp)
         sx = self.x+self.pic.get_width()/64
         sy = self.y+self.pic.get_height()/64
-        blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=self.gun[1])
+
+        if world[int(self.x)][int(self.y)] == 6:
+            blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=1)
+        else:
+            blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=self.gun[1])
         gm.add_obj(blt)
         self.bllft -= 1
         if self.bllft <= 0:
@@ -698,8 +774,8 @@ class player(obj):
             return False
 
 class aiplayer(player):
-    def __init__(self, team, group="-1", hp=100, x=0, y=0):
-        super().__init__(team, hp, x, y)
+    def __init__(self, team, group="-1", hp=100, x=0, y=0, isloc=False, lstcty=None):
+        super().__init__(team, hp, x, y, isloc=isloc)
         self.group = group
         self.attack = False
         groups[group].members.append(self.name)
@@ -707,8 +783,14 @@ class aiplayer(player):
         self.lm_t = 0
         self.targ = (-1, -1)
         self.lstdef = 0
+        if lstcty is not None:
+            self.lstcty = lstcty
+    def getgrp(self):
+        return self.group
     def update(self, gm: pyge.Game):
         self.check(gm)
+        if self.hp <= 0:
+            return
         # shot nearby opponent
         self.attack = False
         strg = self.gun[2] // csz
@@ -719,6 +801,9 @@ class aiplayer(player):
                         if k.team != self.team:
                             self.shot(gm, k.x, k.y)
                             self.attack = True
+                            if world[i][j] == 4:
+                                groups[self.group].act = True
+                                groups[self.group].targ = (i, j)
                             break
         # move toward group target
         if groups[self.group].act:
@@ -809,9 +894,12 @@ else:
         raise e
 
 class game(pyge.Game):
+    totnm = 0
     def add_player(self, pl, nm=None):
         self.add_obj(pl, nm)
         all_plr.append(pl)
+        self.totnm+=1
+        return pl
     def setup(self):
         self.set_caption("blockwar - " + wname)
         self.add_event_listener(pyge.constant.QUIT, save_world)
@@ -824,15 +912,15 @@ class game(pyge.Game):
         for k in range(teamn):
             gx, gy = random.randint(0, wsize-1), random.randint(0, wsize-1)
             cnt = 0
-            while get_owner(gx, gy) != -1 and get_owner(gx, gy) != k and cnt<1000:
+            while ((get_owner(gx, gy) != -1 and get_owner(gx, gy) != k) or world[gx][gy] == 4) and cnt<1000:
                 gx, gy = random.randint(0, wsize-1), random.randint(0, wsize-1)
                 cnt += 1
             if cnt == 1000:
                 continue
             if k == 0:
                 gx, gy = 0, 0
-            for i in range((pit+(player_team_boost if k == 0 else 0) if teamcnt[k] == -1 else teamcnt[k])):
-                gn = f"{k}.{i}"
+            for i in range(pit+(player_team_boost if k == 0 else 0)):
+                gn = f"{random.randint(0, 10000000000)}"
                 groups[gn] = group(k, gn, [])
                 teams[k].gps.append(gn)
                 gsx, gsy = somewhere_nearby(gx, gy, wsize//teamn//4)
@@ -840,7 +928,17 @@ class game(pyge.Game):
                     px, py = somewhere_nearby(gsx, gsy, 5)
                     self.add_player(aiplayer(k, gn, x=px, y=py))
                     teams[k].alive_player_count += 1
-
+        for i, j in all_ckp:
+            if wattr[i][j][0] != -1:
+                gn = f"{random.randint(0, 10000000000)}"
+                groups[gn] = group(wattr[i][j][0], gn, [])
+                teams[wattr[i][j][0]].gps.append(gn)
+                gsx, gsy = somewhere_nearby(i, j, wsize // teamn // 4)
+                for k in range(pig):
+                    px, py = somewhere_nearby(gsx, gsy, 5)
+                    self.add_player(aiplayer(wattr[i][j][0], gn, x=px, y=py, isloc=True, lstcty=(i, j)))
+                    teams[wattr[i][j][0]].alive_player_count += 1
+        print("Loaded total players:", self.totnm)
         # setup world
 
         # for i in range(0, wsize, 10):
@@ -907,34 +1005,39 @@ class game(pyge.Game):
             nwentity = {}
             if gamemode == 0:
                 rp = self.get_obj("hm_player")
-                if not allow_sight_away:
-                    rp.x = x
-                    rp.y = y
-                if self.keys[pyge.constant.K_w]:
-                    rp.moved(0, -1)
-                if self.keys[pyge.constant.K_s]:
-                    rp.moved(0, 1)
-                if self.keys[pyge.constant.K_a]:
-                    rp.moved(-1, 0)
-                if self.keys[pyge.constant.K_d]:
-                    rp.moved(1, 0)
-                if self.mouse_click[0]:
-                    rp.shot(self, self.mouse_pos[0]//blksz+vx, self.mouse_pos[1]//blksz+vy)
-                if rp.x < 0:
-                    rp.x = 0
-                if rp.y < 0:
-                    rp.y = 0
-                if rp.x >= wsize:
-                    rp.x = wsize - 1
-                if rp.y >= wsize:
-                    rp.y = wsize - 1
+                if rp.hp > 0:
+                    if not allow_sight_away:
+                        rp.x = x
+                        rp.y = y
+                    if self.keys[pyge.constant.K_w]:
+                        rp.moved(0, -1)
+                    if self.keys[pyge.constant.K_s]:
+                        rp.moved(0, 1)
+                    if self.keys[pyge.constant.K_a]:
+                        rp.moved(-1, 0)
+                    if self.keys[pyge.constant.K_d]:
+                        rp.moved(1, 0)
+                    if self.mouse_click[0] or self.keys[pyge.constant.K_SPACE]:
+                        rp.shot(self, self.mouse_pos[0]//blksz+vx, self.mouse_pos[1]//blksz+vy)
+                    if rp.x < 0:
+                        rp.x = 0
+                    if rp.y < 0:
+                        rp.y = 0
+                    if rp.x >= wsize:
+                        rp.x = wsize - 1
+                    if rp.y >= wsize:
+                        rp.y = wsize - 1
+                else:
+                    self.sc.fill((0, 0, 0))
+                    self.draw_text("You died!", 300, 300, 48, color=(255, 0, 0))
+                    self.draw_text(f"You will respawn in {int(rp.respctd//self.tick_rate)} seconds...", 300, 350, 24, color=(255, 255, 255))
                 rp.check(self)
                 if rp.hurt:
                     rp.hurt = False
                     self.sc.blit(pyge.rect(WINSZ[0], 10, (255, 0, 0)), (0, 0))
-                    self.sc.blit(pyge.rect(WINSZ[0], 10, (255, 0, 0)), (0, WINSZ[1]-10))
+                    self.sc.blit(pyge.rect(WINSZ[0], 10, (255, 0, 0)), (0, WINSZ[1] - 10))
                     self.sc.blit(pyge.rect(10, WINSZ[1], (255, 0, 0)), (0, 0))
-                    self.sc.blit(pyge.rect(10, WINSZ[1], (255, 0, 0)), (WINSZ[0]-10, 0))
+                    self.sc.blit(pyge.rect(10, WINSZ[1], (255, 0, 0)), (WINSZ[0] - 10, 0))
                 if not allow_sight_away:
                     x = rp.x
                     y = rp.y
@@ -977,6 +1080,7 @@ class game(pyge.Game):
                 if self.tick-msg[0][0] > 90:
                     msg.pop(0)
         self.draw_text("fps: "+str(int(self.fps)), 10, 10, color=(0, 0, 0))
+        self.draw_text("your team player counts: "+str(teams[0].alive_player_count), 10, 40, color=(0, 0, 0))
 
 gm = game()
 gm.run()
