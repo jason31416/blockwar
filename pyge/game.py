@@ -94,10 +94,10 @@ def random_str(length: int) -> str:
     return ''.join(random.choice("abcdefghijklmnopqrstuvwxyz123456789") for _ in range(length))
 
 class Game:
-    def __init__(self, sc: pygame.Surface = None):
+    def __init__(self, sc: pygame.Surface = None, sz=(800, 600)):
         pygame.init()
         if sc is None:
-            self.sc = pygame.display.set_mode((800, 600))
+            self.sc = pygame.display.set_mode(sz)
             self.scsetup()
         else:
             self.sc = sc

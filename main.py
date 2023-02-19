@@ -14,7 +14,8 @@ import pyge
 import os
 from functions import *
 
-WINSZ = (800, 600)
+# WINSZ = (800, 600)
+WINSZ = (3024//2, 1964//2)
 
 # Initialize files
 
@@ -548,7 +549,7 @@ class bullet(obj):
                 i.hp = int(i.hp-self.dmg)
                 i.lstdamagefrom = self.senderteam
                 gm.rem_obj(self.name)
-                if 0 <= (self.x-vx)*blksz <= 800 and 0 <= (self.y-vy)*blksz <= 600 and (self.sender == "hm_player" or i.name == "hm_player"):
+                if 0 <= (self.x-vx)*blksz <= WINSZ[0] and 0 <= (self.y-vy)*blksz <= WINSZ[1] and (self.sender == "hm_player" or i.name == "hm_player"):
                     gm.draw_text("-"+str(self.dmg), (self.x-vx)*blksz, (self.y-vy)*blksz, 24, color=(255, 0, 0))
                 break
 
@@ -1042,7 +1043,7 @@ class game(pyge.Game):
                     x = rp.x
                     y = rp.y
             bx, by = 0, 0
-            bsp = 800-wsize//2
+            bsp = WINSZ[0]-wsize//2
             for j in range(0, wsize, 4):
                 for i in range(0, wsize, 4):
                     posit = all_ckp[winsd[i][j]]
@@ -1082,5 +1083,5 @@ class game(pyge.Game):
         self.draw_text("fps: "+str(int(self.fps)), 10, 10, color=(0, 0, 0))
         self.draw_text("your team player counts: "+str(teams[0].alive_player_count), 10, 40, color=(0, 0, 0))
 
-gm = game()
+gm = game(sz=WINSZ)
 gm.run()
