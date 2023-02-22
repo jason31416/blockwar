@@ -1,34 +1,5 @@
 import random
 
-def read_config(fname):
-    dct = {}
-    fl = open(fname, 'r')
-    rd = fl.read().split('\n')
-    fl.close()
-    for i in rd:
-        if i != '':
-            dct[i.split(':')[0]] = ":".join(i.split(':')[1:])
-            if dct[i.split(':')[0]][0] == ' ':
-                dct[i.split(':')[0]] = dct[i.split(':')[0]][1:]
-    return dct
-
-def write_config(fname, dct):
-    fl = open(fname, 'w+')
-    for i in dct:
-        if type(dct[i]) == bool:
-            fl.write(i+': '+("true" if dct[i] else "false")+'\n')
-        else:
-            fl.write(i+': '+str(dct[i])+'\n')
-    fl.close()
-
-def is_file(fname):
-    try:
-        fl = open(fname, 'r')
-        fl.close()
-        return True
-    except IOError:
-        return False
-
 
 namechoices = ["Beijing", "Shanghai", "Guangzhou", "Shenzhen", "Tianjin", "Hong Kong", "Nanking", "Macau", "Tibet", "Sian", "chu-hai", "ChengTu", "Honolulu", "Anchorage", "Vancouver", "San Francisco", "Seattle", "Los Angeles", "Aklavik", "Edmonton", "Phoenix", "Denver", "Mexico City", "Winnipeg", "Houston", "Minneapolis", "St. Paul", "New Orleans", "Chicago", "Montgomery", "Guatemala", "San Salvador", "Tegucigalpa", "Managua", "Havana", "Indianapolis", "Atlanta", "Detroit"]
 

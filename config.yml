@@ -1,0 +1,22 @@
+display:
+  is_split_line: false
+  show_split_line: true
+hacked:
+  allow_sight_away: false # Normally False
+ai: # for AI behaviors, suggest not change for the best game experience
+  max_ai_targ_at_one_pt: 3 # Too many might cause AI to only focus on one city
+  let_ai_defence: false # Might cause lag
+game:
+  ai_no_respawn: false # For noobs, suggest False
+  cty_as_spawn_point: true # False: random spawn point every death
+  lost_all_terri_no_respawn: true # Usually true
+  wall_hp: 60 # default: 60
+  player_in_group: 1 # default: 1, more might cause bug
+  group_in_team: 3 # default: 3, each game have this amount of players at the beginning of the game. DO NOT MAKE IT BELOW 3 IF DIFFICULTY IS HARDER THAN "medium"(not including)
+  difficulty: normal # baby, easy, medium, normal, extreme, impossible
+
+worldgen: # for new worlds, old world wouldn't get affected
+  worldsize: 300 # more might cause loading world slow, suggest 200-350
+  citycount: 120 # suggest change with wsize
+  teamcount: 12 # suggest change with wsize, 2 <= teamn <= 12!
+

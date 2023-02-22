@@ -1,21 +1,21 @@
 """
-v 1.5.2:
-    - Fixed city name display
-    - Added guns
-
-    - Todo: gun shop!
+v 1.6.1
+- Biomes
 """
-version = (1, 5, 2)
-support_save_version = [(1, 5, 2)]
+import random
+
+version = (1, 6, 1)
+support_save_version = [(1, 6, 1), (1, 5, 3)]
 
 import math
 import time
 import pyge
 import os
 from functions import *
+import yaml
 
-# WINSZ = (800, 600)
-WINSZ = (3024//2, 1964//2)
+WINSZ = (800, 600)
+# WINSZ = (3024//2, 1964//2)
 
 # Initialize files
 
@@ -25,26 +25,55 @@ if not os.path.exists("saves"):
 all_saves = os.listdir("saves")
 
 # new world
-wsize = 300
 x, y = 0, 0
-blksz = 40
-vx = x-WINSZ[0]//blksz//2
-vy = y-WINSZ[1]//blksz//2
+blkszd = 30
+vx = x-WINSZ[0]//blkszd//2
+vy = y-WINSZ[1]//blkszd//2
 csz = 4
-cn = wsize//csz
 gamemode = 0 # 0: normal 1: spectator
-cty_count = 180
-teamn = 12
-player_team_boost = 0
 only_log_ipt_cty = False
 
 defrespctd = 200
+blksz = blkszd
 
 clrs = [(0, 0, 255), (255, 50, 50), (0, 255, 0), (255, 0, 255), (255, 255, 0), (0, 255, 255), (255, 125, 0), (0, 150, 0), (50, 50, 50), (255, 170, 170), (128, 64, 0), (135, 206, 235)]
 
 random.shuffle(clrs)
 
+
+# config
+
+with open("config.yml") as fl:
+    cnfg: dict = yaml.full_load(fl)
+
+def getd(ky, df, cf=None):
+    if cf is None:
+        cf = cnfg
+    if "." in ky:
+        return getd(".".join(ky.split(".")[1:]), df, cnfg[ky.split(".")[0]])
+    if ky in cnfg:
+        return cnfg[ky]
+    return df
+
+is_spilt_line = getd("display.is_split_line", False)
+allow_sight_away = getd('hacked.allow_sight_away', False)
+ai_no_respawn = getd('game.ai_no_respawn', False)
+max_ai_targ_at_one_pt = getd('game.max_ai_targ_at_one_pt', 3)
+cty_as_spawn_point = getd('game.cty_as_spawn_point', True)
+lost_all_terri_no_respawn = getd('game.lost_all_terri_no_respawn', True)
+let_ai_defence = getd('game.let_ai_defence', False)
+wall_hp = getd('game.wall_hp', 60)
+pig = getd('game.player_in_group', 1)
+pit = getd('game.group_in_team', 3)
+spl = getd('display.show_split_line', True)
+player_team_boost = {"baby": 2, "easy": 1, "medium": 0, "normal": -1, "extreme": -2, "impossible": -3}[getd('game.difficulty', "medium")]
+wsize = getd('worldgen.worldsize', 300)
+cty_count = getd('worldgen.citycount', 120)
+teamn = getd('worldgen.teamcount', 12)
+cn = wsize//csz
+
 # input wname
+
 
 wname = input("World name: ")
 if wname+".sv" in all_saves:
@@ -70,6 +99,10 @@ def generate_world():
         if random.randint(0, 3) == 0:
             imp_ckp.append((rx, ry))
 
+    for j in range(cty_count//4*3):
+        rx, ry = random.randint(0, wsize - 1), random.randint(0, wsize - 1)
+        world[rx][ry] = random.choice([7, 8, 9])
+
     for j in range(cty_count//2):
         rx, ry = random.randint(0, wsize - 1), random.randint(0, wsize - 1)
         world[rx][ry] = 6
@@ -80,10 +113,15 @@ def generate_world():
     print("loading world")
     while True:
         ret = generate_area()
-        print("\rgenerating area    " + str(int(ret[1] / wsize ** 2 * 100)) + "% (" + str(ret[1]) + "/" + str(
-            wsize ** 2 * 100) + " blocks)", end="")
+        print("\rgenerating area    " + str(int(ret[1] / ret[2]*100)) + "% (" + str(ret[1]) + "/" + str(ret[2]) + ")", end="")
         if not ret[0]:
             break
+    for i in range(wsize):
+        for j in range(wsize):
+            if world[i][j] == 7:
+                world[i][j] = 0
+            if world[i][j] == 8 and random.randint(1, 10)==1:
+                build_wall(i, j)
     print("\nfinished")
 
 teamcnt = [-1] * teamn
@@ -93,6 +131,7 @@ def load_world_from_file(fname):
     f = open("saves/"+fname+".sv", 'r')
     rd = f.read().split("\n")
     f.close()
+
     ind = 0
     vsn = tuple(int(i) for i in rd[ind].split("."))
     if vsn == version:
@@ -181,7 +220,7 @@ def log(gmtk, msg_, clr=(0, 0, 0)):
 
 def somewhere_nearby(p1, p2, r):
     rx, ry = p1+random.randint(-r, r), p2+random.randint(-r, r)
-    while rx < 0 or rx >= wsize or ry < 0 or ry >= wsize or world[rx][ry] not in (0, 6):
+    while rx < 0 or rx >= wsize or ry < 0 or ry >= wsize or world[rx][ry] not in (0, 6, 7, 8, 9):
         rx, ry = p1+random.randint(-r, r), p2+random.randint(-r, r)
     return rx, ry
 
@@ -190,7 +229,9 @@ def generate_area():
     bkup = [[winsd[j][i] for i in range(wsize)] for j in range(wsize)]
     bkup2 = [[world[j][i] for i in range(wsize)] for j in range(wsize)]
     bb = False
+    bb2 = False
     cnt = 0
+    tot = 0
     for i in range(wsize):
         for j in range(wsize):
             if bkup2[i][j]==6:
@@ -235,55 +276,24 @@ def generate_area():
                         nearby_terri[bkup[i][j]].append(winsd[i][j-1])
             else:
                 bb = True
-    return bb, cnt
-
-# config
-
-
-def_cfgg = {'is_split_line': False, 'allow_sight_away': False, 'ai_no_respawn': False, 'max_ai_targ_at_one_pt': 3, 'cty_as_spawn_point': True, 'lost_all_terri_no_respawn': True, 'let_ai_defence': False, 'wall_hp': 60, "player_in_group": 1, "group_in_team": 20, 'show_split_line': True}
-
-if not is_file('config.txt'):
-    write_config('config.txt', def_cfgg)
-
-cfgg = read_config("config.txt")
-
-def get_bool_from_cfg(name, default):
-    if name in cfgg:
-        if cfgg[name] == 'true':
-            return True
-        elif cfgg[name] == 'false':
-            return False
-        else:
-            return default
-    else:
-        print(name, " option not found in config.txt, using default value")
-        return default
-
-def get_int_from_cfg(name, default):
-    if name in cfgg:
-        return int(cfgg[name])
-    else:
-        print(name, " option not found in config.txt, using default value")
-        return default
-
-def get_str_from_cfg(name, default):
-    if name in cfgg:
-        return cfgg[name]
-    else:
-        print(name, " option not found in config.txt, using default value")
-        return default
-
-is_spilt_line = get_bool_from_cfg('is_split_line', def_cfgg['is_split_line'])
-allow_sight_away = get_bool_from_cfg('allow_sight_away', def_cfgg['allow_sight_away'])
-ai_no_respawn = get_bool_from_cfg('ai_no_respawn', def_cfgg['ai_no_respawn'])
-max_ai_targ_at_one_pt = get_int_from_cfg('max_ai_targ_at_one_pt', def_cfgg['max_ai_targ_at_one_pt'])
-cty_as_spawn_point = get_bool_from_cfg('cty_as_spawn_point', def_cfgg['cty_as_spawn_point'])
-lost_all_terri_no_respawn = get_bool_from_cfg('lost_all_terri_no_respawn', def_cfgg['lost_all_terri_no_respawn'])
-let_ai_defence = get_bool_from_cfg('let_ai_defence', def_cfgg['let_ai_defence'])
-wall_hp = get_int_from_cfg('wall_hp', def_cfgg['wall_hp'])
-pig = get_int_from_cfg('player_in_group', def_cfgg['player_in_group'])
-pit = get_int_from_cfg('group_in_team', def_cfgg['group_in_team'])
-spl = get_bool_from_cfg('show_split_line', def_cfgg['show_split_line'])
+            if bkup2[i][j] in [7, 8, 9]:
+                if i + 1 < wsize:
+                    if world[i+1][j] == 0 and random.randint(0, 100) < 60:
+                        world[i + 1][j] = bkup2[i][j]
+                        bb = True
+                if i - 1 >= 0:
+                    if world[i-1][j] == 0 and random.randint(0, 100) < 60:
+                        world[i - 1][j] = bkup2[i][j]
+                        bb = True
+                if j + 1 < wsize:
+                    if world[i][j+1] == 0 and random.randint(0, 100) < 60:
+                        world[i][j + 1] = bkup2[i][j]
+                        bb = True
+                if j - 1 >= 0:
+                    if world[i][j-1] == 0 and random.randint(0, 100) < 60:
+                        world[i][j - 1] = bkup2[i][j]
+                        bb = True
+    return bb, cnt, wsize*wsize
 
 def dis(p1, p2):
     return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
@@ -439,8 +449,8 @@ class group:
                 teams[self.team].csttarg[ntarg] += 1
             self.targ = ntarg
 
-blkattrs = {0: ba((200, 200, 200), 1.5, 0), 1: ba((100, 100, 100), 1.5, 100000), 2: ba((0, 0, 50), 2.5, 0), 3: ba((255, 0, 0), 0.2, -1), 4: ba((255, 255, 0), 1.5, 0), 5: ba((100, 100, 100), 1.5, 10), 6: ba((0, 100, 255), 0.5, -1)}
-# 0: empty, 1: obstacle, 2: road 3: lava 4: city
+blkattrs = {0: ba((200, 200, 200), 1.5, 0), 1: ba((100, 100, 100), 1.5, 100000), 2: ba((0, 0, 50), 2.5, 0), 3: ba((255, 0, 0), 0.2, -1), 4: ba((255, 255, 0), 1.5, 0), 5: ba((100, 100, 100), 1.5, 10), 6: ba((0, 50, 255), 0.5, -1), 7: ba((0, 0, 0), 1, 0), 8: ba((150, 200, 150), 1, 0), 9: ba((150, 150, 150), 1.5, -1)}
+# 0: empty, 1: obstacle, 2: road 3: lava 4: city 5: 6: ocean  7: temp_empty 8: woodland 9: low land
 
 teams = []
 groups = {"-1": group(0, "-1", [])}
@@ -459,7 +469,7 @@ msg = []
 
 
 def build_wall(x, y):
-    if world[x][y] == 0:
+    if world[x][y] in [0, 8]:
         world[x][y] = 5
         wattr[x][y] = [-1, wall_hp, 0]
 
@@ -524,6 +534,13 @@ class bullet(obj):
                 world[int(self.x)][int(self.y)] = 0
             gm.rem_obj(self.name)
             return
+        for i, j in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            if 0<=int(self.x)+i<wsize and 0<=int(self.y)+j<wsize and world[int(self.x)+i][int(self.y)+j] == 5:
+                wattr[int(self.x)+i][int(self.y)+j][1] -= self.dmg
+                if wattr[int(self.x)+i][int(self.y)+j][1] <= 0:
+                    world[int(self.x)+i][int(self.y)+j] = 0
+                gm.rem_obj(self.name)
+                return
         if blkattrs[world[int(self.x)][int(self.y)]].amp > self.amp:
             gm.rem_obj(self.name)
             return
@@ -732,10 +749,10 @@ class player(obj):
         sx = self.x+self.pic.get_width()/64
         sy = self.y+self.pic.get_height()/64
 
-        if world[int(self.x)][int(self.y)] == 6:
-            blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=1)
-        else:
-            blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=self.gun[1])
+        # if world[int(self.x)][int(self.y)] == 6:
+        #     blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=1)
+        # else:
+        blt = bullet(sx, sy, dx, dy, amp, self.name, sdt=self.team, dmg=self.gun[1])
         gm.add_obj(blt)
         self.bllft -= 1
         if self.bllft <= 0:
@@ -826,7 +843,10 @@ class aiplayer(player):
                     dy = 1
                 elif self.y > ty:
                     dy = -1
-                self.moveai(gm, dx, dy, self.attack)
+                try:
+                    self.moveai(gm, dx, dy, self.attack)
+                except IndexError:
+                    print(tx, ty)
         elif groups[self.group].targ[0] != -1:
             if self.targ[0] == -1:
                 if self.lstdef == 0:
@@ -902,6 +922,7 @@ class game(pyge.Game):
         self.totnm+=1
         return pl
     def setup(self):
+        global x, y
         self.set_caption("blockwar - " + wname)
         self.add_event_listener(pyge.constant.QUIT, save_world)
         # setup players
@@ -919,7 +940,7 @@ class game(pyge.Game):
             if cnt == 1000:
                 continue
             if k == 0:
-                gx, gy = 0, 0
+                x, y = gx, gy
             for i in range(pit+(player_team_boost if k == 0 else 0)):
                 gn = f"{random.randint(0, 10000000000)}"
                 groups[gn] = group(k, gn, [])
@@ -959,9 +980,9 @@ class game(pyge.Game):
         vy = int(y) - WINSZ[1] // blksz // 2
         if self.now_page == "main":
             if self.keys[pyge.constant.K_c]:
-                blksz = 30
+                blksz = blkszd-10
             else:
-                blksz = 40
+                blksz = blkszd
             will_draw = []
             for i in range(max(vx, 0), min(vx+WINSZ[0]//blksz+2, wsize)):
                 for j in range(max(vy, 0), min(vy+WINSZ[1]//blksz+2, wsize)):
@@ -970,10 +991,11 @@ class game(pyge.Game):
                         self.sc.blit(pyge.rect(blksz - is_spilt_line, blksz - is_spilt_line, (150, 150, 150)), ((i - vx - x % 1) * blksz, (j - vy - y % 1) * blksz))
                     if world[i][j] == 5:
                         self.sc.blit(pyge.rect((wattr[i][j][1]/wall_hp)*blksz, 5, get_hp_clr(wattr[i][j][1], wall_hp)), ((i - vx - x % 1) * blksz, (j - vy - y % 1) * blksz))
-                    if wattr[all_ckp[winsd[i][j]][0]][all_ckp[winsd[i][j]][1]][0] != -1 and world[i][j] == 0:
+                    if wattr[all_ckp[winsd[i][j]][0]][all_ckp[winsd[i][j]][1]][0] != -1 and world[i][j] in [0, 7, 8, 9]:
                         tc = teams[wattr[all_ckp[winsd[i][j]][0]][all_ckp[winsd[i][j]][1]][0]].clr
                         self.sc.blit(rect_alpha(blksz, blksz, (tc[0], tc[1], tc[2], 100)), ((i-vx-x%1)*blksz, (j-vy-y%1)*blksz))
-                    if wattr[i][j][0] != -1:
+                    # if wattr[i][j][0] != -1:
+                    if wattr[i][j][0] != -1 and wattr[i][j][0] == 0:
                         self.sc.blit(pyge.rect(blksz//2, blksz//2, teams[wattr[i][j][0]].clr), ((i-vx-x%1)*blksz+blksz//4, (j-vy-y%1)*blksz+blksz//4))
                         if wattr[i][j] == 0:
                             if (i, j) in teams[0].defs.keys():
@@ -997,6 +1019,9 @@ class game(pyge.Game):
                     x -= 1
                 if self.keys[pyge.constant.K_RIGHT]:
                     x += 1
+                if self.keys[pyge.constant.K_g]:
+                    # print(all_ckp[winsd[x][y]], winsd[x][y], all_ckp)
+                    x, y = all_ckp[winsd[x][y]]
             for i in teams:
                 i.update(self)
                 for j in i.gps:
@@ -1069,7 +1094,7 @@ class game(pyge.Game):
                                 if (self.mouse_pos[0]-bsp)//2 == i//4 and self.mouse_pos[1]//2 == j//4:
                                     teams[0].csttarg[(i, j)] = 0
                                     time.sleep(0.5)
-                    if world[i][j] == 0 and wattr[posit[0]][posit[1]][0] != -1:
+                    if world[i][j] in [0, 7, 8, 9] and wattr[posit[0]][posit[1]][0] != -1:
                         self.sc.blit(pyge.rect(2, 2, teams[wattr[posit[0]][posit[1]][0]].clr), (bsp+bx, by))
                     else:
                         self.sc.blit(pyge.rect(2, 2, blkattrs[world[i][j]].clr), (bsp + bx, by))
